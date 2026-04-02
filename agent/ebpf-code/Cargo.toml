@@ -1,0 +1,15 @@
+[package]
+name = "ebpf-code"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-bpf = "0.1.0"
+aya-log-ebpf = "0.1.0"
+ebpf-common = { path = "../ebpf-common" }
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = "s"
+strip = true

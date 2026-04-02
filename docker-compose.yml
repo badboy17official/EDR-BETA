@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-threatuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-threatpass}
+      POSTGRES_DB: ${POSTGRES_DB:-threatdb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - threat_net
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-threatuser} -d ${POSTGRES_DB:-threatdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - threat_net
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - threat_net
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - .:/workspace # Mount the entire codebase (backend & sandbox)
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://threatuser:threatpass@postgres:5432/threatdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+    networks:
+      - threat_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      # Simple HTTP check using curl
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  worker_static:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - .:/workspace
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://threatuser:threatpass@postgres:5432/threatdb}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+    networks:
+      - threat_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: ["python", "workers/static_worker.py"]
+
+  worker_ml:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - .:/workspace
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://threatuser:threatpass@postgres:5432/threatdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+    networks:
+      - threat_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: ["python", "workers/ml_worker.py"]
+
+  worker_sandbox:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock # Required to spawn sandbox containers
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://threatuser:threatpass@postgres:5432/threatdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+    networks:
+      - threat_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: ["python", "workers/sandbox_worker.py"]
+
+networks:
+  threat_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

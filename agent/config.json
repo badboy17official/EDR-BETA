@@ -1,0 +1,9 @@
+{
+    "api_url": "http://127.0.0.1:8000/api/v1",
+    "api_key": "prod-agent-key-change-me",
+    "agent_id": "agent-linux-alpha-01",
+    "monitor_dir": "/tmp/monitor",
+    "quarantine_dir": "/tmp/quarantine",
+    "cache_capacity": 2048,
+    "offline_queue_path": "/tmp/edr/offline-queue.jsonl"
+}
