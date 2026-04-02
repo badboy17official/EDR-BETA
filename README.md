@@ -82,4 +82,11 @@ This system is a structurally complete **Minimum Viable Product (MVP)**. Before 
 
 ---
 ## 📝 License
-See the `LICENSE` file for details.
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. 
+
+What this means for you:
+- You have complete freedom to **use**, **modify**, and **distribute** this software.
+- If you distribute copies or modified versions of this software, you **must** also release your source code back to the community under this same GPLv3 license.
+- It prevents proprietary companies from taking the code, modifying it, and keeping the modifications closed-source.
+
+See the `LICENSE` file for full details.
